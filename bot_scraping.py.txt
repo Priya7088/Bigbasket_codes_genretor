@@ -1,0 +1,69 @@
+import telebot
+import requests
+from bs4 import BeautifulSoup
+
+# Yahan apna BotFather wala token daalein
+API_TOKEN = '8909948523:AAHqg12FqweW008Ahn1bSru7KuIPAJTvgas'
+bot = telebot.TeleBot(API_TOKEN)
+
+# Yeh function BigBasket par search karta hai
+def search_bigbasket(query):
+    # BigBasket ka search URL
+    url = f"https://www.bigbasket.com/ps/?q={query}"
+    
+    # Headers bhejna zaroori hai taaki website ko lage ki koi asli browser hai, bot nahi
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    
+    try:
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # NOTE: Website ka design change hone par ye HTML classes badal sakti hain.
+        # Agar bot blank result de, toh humein BigBasket ke naye HTML tags yahan update karne honge.
+        
+        # Product ka naam aur price nikalne ka logic (Demo Tags)
+        products = soup.find_all('div', class_='SKUDeck___StyledDiv-sc-1e5d9gk-0', limit=3) 
+        
+        if not products:
+            return f"Sorry, '{query}' ke liye koi result nahi mila ya website block kar rahi hai."
+            
+        result_text = f"🛒 **BigBasket Results for '{query}':**\n\n"
+        
+        for item in products:
+            # Hum assume kar rahe hain h3 tag mein naam hai
+            name_tag = item.find('h3')
+            price_tag = item.find('span', class_='Label-sc-15v1nk5-0 Pricing___StyledLabel-sc-pdlpyd-1')
+            
+            name = name_tag.text.strip() if name_tag else "Naam nahi mila"
+            price = price_tag.text.strip() if price_tag else "Price nahi mila"
+            
+            result_text += f"🔹 {name} \n💰 Price: {price}\n\n"
+            
+        return result_text
+        
+    except Exception as e:
+        return f"Kuch error aa gaya: {str(e)}"
+
+# Start command aane par
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    bot.reply_to(message, "Namaste! Mujhe kisi bhi product ka naam bhejiye (jaise: 'milk' ya 'onion') aur main BigBasket se uska rate bataunga.")
+
+# Jab user koi product ka naam likhe
+@bot.message_handler(func=lambda message: True)
+def handle_product_search(message):
+    query = message.text
+    
+    # User ko waiting message bhejna
+    bot.reply_to(message, f"🔍 '{query}' ko BigBasket par dhoondh raha hoon. Kripya thoda wait karein...")
+    
+    # Scraping function ko call karna
+    result = search_bigbasket(query)
+    
+    # Final result bhejna
+    bot.send_message(message.chat.id, result, parse_mode="Markdown")
+
+print("Scraping Bot start ho gaya hai...")
+bot.infinity_polling()
